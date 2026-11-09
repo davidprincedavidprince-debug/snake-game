@@ -2,6 +2,8 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build:
@@ -34,7 +36,12 @@ jobs:
 
       - name: Compile APK via Buildozer
         run: |
-          yes | buildozer android debug
+          set -o pipefail
+          buildozer android debug 2>&1 | tee build.log
+
+      - name: Show build error
+        if: failure()
+        run: tail -n 150 build.log
 
       - name: Upload Finished Installer APK
         uses: actions/upload-artifact@v4
