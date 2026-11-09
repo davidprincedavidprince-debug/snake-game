@@ -3,9 +3,9 @@ from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.clock import Clock
-from kivy.graphics import Ellipse, Color
+from kivy.graphics import Rectangle, Color
 
-GRID_SIZE = 14  # Controls scaling (makes circular assets large and visible)
+GRID_SIZE = 14  # Controls image scaling (14x14 grid makes assets large and visible)
 
 class SnakeGame(Widget):
     def __init__(self, **kwargs):
@@ -28,7 +28,7 @@ class SnakeGame(Widget):
         self.touch_start_x = 0
         self.touch_start_y = 0
 
-        # Game Over text overlay reference
+        # Game Over textual overlay reference
         self.game_over_label = None
 
         self.bind(size=self.draw_game, pos=self.draw_game)
@@ -41,16 +41,16 @@ class SnakeGame(Widget):
         cell_height = self.height / GRID_SIZE
 
         with self.canvas:
-            # 1. Draw Apple as a Circle
-            Ellipse(
+            # 1. Draw Apple using randomized selector
+            Rectangle(
                 source=self.current_apple_img, 
                 pos=(self.x + self.food[0] * cell_width, self.y + self.food[1] * cell_height),
                 size=(cell_width, cell_height)
             )
 
-            # 2. Draw Moving Wall blocks as Circles
+            # 2. Draw Moving Wall blocks
             for wx, wy in self.wall_segments:
-                Ellipse(
+                Rectangle(
                     source='wall.png',
                     pos=(self.x + wx * cell_width, self.y + wy * cell_height),
                     size=(cell_width, cell_height)
@@ -59,16 +59,16 @@ class SnakeGame(Widget):
             # 3. Draw Snake Structure
             for index, (x, y) in enumerate(self.snake):
                 if index == 0:
-                    # Head uses custom image wrapped in a perfect circle
-                    Ellipse(
+                    # Head uses custom single image layout
+                    Rectangle(
                         source='snake_head.png',
                         pos=(self.x + x * cell_width, self.y + y * cell_height),
                         size=(cell_width, cell_height)
                     )
                 else:
-                    # Default Body: Emerald green vector circles
+                    # Body falls back to default geometric vector squares
                     Color(0.18, 0.80, 0.44, 1.0)
-                    Ellipse(
+                    Rectangle(
                         pos=(self.x + x * cell_width + 1, self.y + y * cell_height + 1),
                         size=(cell_width - 2, cell_height - 2)
                     )
@@ -138,7 +138,7 @@ class SnakeGame(Widget):
 
         new_head = (head_x, head_y)
 
-        # Death Validations
+        # Collision & Death Validations (screen margins, self, and moving wall coordinates)
         if (head_x < 0 or head_x >= GRID_SIZE or 
             head_y < 0 or head_y >= GRID_SIZE or 
             new_head in self.snake or 
