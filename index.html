@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Custom Snake Game</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; }
+  html, body { margin: 0; height: 100%; background: #cdeadb; overflow: hidden; touch-action: none; }
   body { display: flex; align-items: center; justify-content: center; }
   canvas { display: block; border: 2px solid #2ecc70; border-radius: 6px; }
 </style>
@@ -13,7 +13,10 @@
 <body>
 <canvas id="game"></canvas>
 <script>
-const GRID = 14;
+const CELLS_ACROSS = 14;           // Cells along the shorter screen side (controls image size)
+const BOARD_COLOR = '#eaf7f0';     // Light pastel mint play area
+const BODY_COLOR = 'rgb(39, 174, 96)';
+
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
@@ -22,24 +25,32 @@ const appleImgs = [load('apple1.png'), load('apple2.png'), load('apple3.png')];
 const wallImg = load('Wall.png');
 const headImg = load('snake_head.png');
 
-let size = 0, cell = 0;
+let COLS = 0, ROWS = 0, cell = 0, W = 0, H = 0;
 
-// Draw at the phone's real pixel density so everything stays sharp
+// Fill the screen: square cells, as many columns and rows as fit
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  const maxSize = Math.min(window.innerWidth, window.innerHeight) - 8; // room for the border
-  size = Math.floor(maxSize / GRID) * GRID;  // whole-pixel cells, no blurry seams
-  cell = size / GRID;
+  const availW = window.innerWidth - 8;   // room for the border
+  const availH = window.innerHeight - 8;
 
-  canvas.style.width = size + 'px';
-  canvas.style.height = size + 'px';
-  canvas.width = Math.round(size * dpr);
-  canvas.height = Math.round(size * dpr);
+  cell = Math.floor(Math.min(availW, availH) / CELLS_ACROSS);
+  const newCols = Math.floor(availW / cell);
+  const newRows = Math.floor(availH / cell);
+  const changed = newCols !== COLS || newRows !== ROWS;
+  COLS = newCols; ROWS = newRows;
+  W = COLS * cell; H = ROWS * cell;
+
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  draw();
+
+  // If the board size changed mid-game (e.g. phone rotated), start fresh
+  if (changed && snake) restart(); else draw();
 }
 window.addEventListener('resize', resize);
 
@@ -48,13 +59,15 @@ const rand = n => Math.floor(Math.random() * n);
 const pick = a => a[rand(a.length)];
 const same = (a, b) => a[0] === b[0] && a[1] === b[1];
 const has = (list, p) => list.some(q => same(q, p));
-const wrap = v => ((v % GRID) + GRID) % GRID;  // Off one edge, back in on the opposite edge
+const wrapX = v => ((v % COLS) + COLS) % COLS;  // Off one edge, back in on the opposite edge
+const wrapY = v => ((v % ROWS) + ROWS) % ROWS;
 
 function restart() {
-  snake = [[5, 5], [5, 4], [5, 3]];
+  const cx = Math.floor(COLS / 2), cy = Math.floor(ROWS / 2);
+  snake = [[cx, cy], [cx, cy - 1], [cx, cy - 2]];   // Start in the middle, heading up
   direction = 'UP'; lastMoved = 'UP';
   food = [3, 3]; appleImg = pick(appleImgs);
-  wall = [[10, 10]]; wallDir = 'LEFT'; wallMove = 0; wallGrow = 0;
+  wall = [[COLS - 3, ROWS - 3]]; wallDir = 'LEFT'; wallMove = 0; wallGrow = 0;
   gameOver = false;
   draw();
 }
@@ -76,14 +89,14 @@ function update() {
     wallMove = 0;
     if (Math.random() < 0.2) wallDir = pick(['UP', 'DOWN', 'LEFT', 'RIGHT']);
     const [wx, wy] = step(wall[0], wallDir);
-    wall.unshift([wrap(wx), wrap(wy)]);
+    wall.unshift([wrapX(wx), wrapY(wy)]);
     wallGrow++;
     if (wallGrow >= 15) wallGrow = 0; else wall.pop();
   }
 
   // 2. Snake step: wraps around edges; only hitting itself or the wall ends the game
   const [nx, ny] = step(snake[0], direction);
-  const head = [wrap(nx), wrap(ny)];
+  const head = [wrapX(nx), wrapY(ny)];
   if (has(snake, head) || has(wall, head)) {
     gameOver = true; draw(); return;
   }
@@ -92,7 +105,7 @@ function update() {
 
   // 3. Apple eaten?
   if (same(head, food)) {
-    do { food = [rand(GRID), rand(GRID)]; } while (has(snake, food) || has(wall, food));
+    do { food = [rand(COLS), rand(ROWS)]; } while (has(snake, food) || has(wall, food));
     appleImg = pick(appleImgs);
   } else {
     snake.pop();
@@ -101,19 +114,18 @@ function update() {
 }
 
 // Game grid has y going up (like Kivy); the screen has y going down
-function px(x, y) { return [x * cell, (GRID - 1 - y) * cell]; }
+function px(x, y) { return [x * cell, (ROWS - 1 - y) * cell]; }
 function drawImg(img, x, y) {
   const [a, b] = px(x, y);
   if (img.complete && img.naturalWidth) ctx.drawImage(img, a, b, cell, cell);
-  else { ctx.fillStyle = '#888'; ctx.fillRect(a, b, cell, cell); }
+  else { ctx.fillStyle = '#bbb'; ctx.fillRect(a, b, cell, cell); }
 }
 
 function draw() {
-  if (!snake || !size) return;
+  if (!snake || !W) return;
 
-  // Board background, slightly lighter than the page so the edges are visible
-  ctx.fillStyle = '#111';
-  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = BOARD_COLOR;
+  ctx.fillRect(0, 0, W, H);
 
   drawImg(appleImg, food[0], food[1]);
   wall.forEach(([x, y]) => drawImg(wallImg, x, y));
@@ -121,20 +133,22 @@ function draw() {
     if (i === 0) drawImg(headImg, x, y);
     else {
       const [a, b] = px(x, y);
-      ctx.fillStyle = 'rgb(46, 204, 112)';
+      ctx.fillStyle = BODY_COLOR;
       ctx.fillRect(a + 1, b + 1, cell - 2, cell - 2);
     }
   });
 
   if (gameOver) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.fillRect(0, 0, size, size);
+    const s = Math.min(W, H);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = 'rgb(230, 26, 26)';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `bold ${Math.floor(size / 10)}px sans-serif`;
-    ctx.fillText('GAME OVER', size / 2, size / 2 - size / 16);
-    ctx.font = `${Math.floor(size / 22)}px sans-serif`;
-    ctx.fillText('[Tap to Restart]', size / 2, size / 2 + size / 16);
+    ctx.font = `bold ${Math.floor(s / 10)}px sans-serif`;
+    ctx.fillText('GAME OVER', W / 2, H / 2 - s / 16);
+    ctx.fillStyle = '#fff';
+    ctx.font = `${Math.floor(s / 22)}px sans-serif`;
+    ctx.fillText('[Tap to Restart]', W / 2, H / 2 + s / 16);
   }
 }
 
@@ -167,8 +181,8 @@ window.addEventListener('keydown', e => {
 });
 
 [...appleImgs, wallImg, headImg].forEach(i => i.onload = draw);
-restart();
 resize();
+restart();
 setInterval(update, 200);
 </script>
 </body>
