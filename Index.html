@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Custom Snake Game</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; background: #000; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+const GRID = 14;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+function load(src) { const i = new Image(); i.src = src; return i; }
+const appleImgs = [load('apple1.png'), load('apple2.png'), load('apple3.png')];
+const wallImg = load('Wall.png');
+const headImg = load('snake_head.png');
+
+let cell = 0;
+function resize() {
+  const size = Math.floor(Math.min(window.innerWidth, window.innerHeight));
+  canvas.width = size; canvas.height = size; cell = size / GRID;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+let snake, direction, lastMoved, food, appleImg, wall, wallDir, wallMove, wallGrow, gameOver;
+const rand = n => Math.floor(Math.random() * n);
+const pick = a => a[rand(a.length)];
+const same = (a, b) => a[0] === b[0] && a[1] === b[1];
+const has = (list, p) => list.some(q => same(q, p));
+
+function restart() {
+  snake = [[5, 5], [5, 4], [5, 3]];
+  direction = 'UP'; lastMoved = 'UP';
+  food = [3, 3]; appleImg = pick(appleImgs);
+  wall = [[10, 10]]; wallDir = 'LEFT'; wallMove = 0; wallGrow = 0;
+  gameOver = false;
+  draw();
+}
+
+function step([x, y], dir) {
+  if (dir === 'UP') y += 1;
+  else if (dir === 'DOWN') y -= 1;
+  else if (dir === 'LEFT') x -= 1;
+  else if (dir === 'RIGHT') x += 1;
+  return [x, y];
+}
+
+function update() {
+  if (gameOver) return;
+
+  // 1. Moving wall: step, wrap around edges, grow every 15 moves
+  wallMove++;
+  if (wallMove >= 2) {
+    wallMove = 0;
+    if (Math.random() < 0.2) wallDir = pick(['UP', 'DOWN', 'LEFT', 'RIGHT']);
+    let [wx, wy] = step(wall[0], wallDir);
+    wx = ((wx % GRID) + GRID) % GRID;
+    wy = ((wy % GRID) + GRID) % GRID;
+    wall.unshift([wx, wy]);
+    wallGrow++;
+    if (wallGrow >= 15) wallGrow = 0; else wall.pop();
+  }
+
+  // 2. Snake step and collisions
+  const head = step(snake[0], direction);
+  const [hx, hy] = head;
+  if (hx < 0 || hx >= GRID || hy < 0 || hy >= GRID || has(snake, head) || has(wall, head)) {
+    gameOver = true; draw(); return;
+  }
+  snake.unshift(head);
+  lastMoved = direction;
+
+  // 3. Apple eaten?
+  if (same(head, food)) {
+    do { food = [rand(GRID), rand(GRID)]; } while (has(snake, food) || has(wall, food));
+    appleImg = pick(appleImgs);
+  } else {
+    snake.pop();
+  }
+  draw();
+}
+
+// Game grid has y going up (like Kivy); the screen has y going down
+function px(x, y) { return [x * cell, (GRID - 1 - y) * cell]; }
+function drawImg(img, x, y) {
+  const [a, b] = px(x, y);
+  if (img.complete && img.naturalWidth) ctx.drawImage(img, a, b, cell, cell);
+  else { ctx.fillStyle = '#888'; ctx.fillRect(a, b, cell, cell); }
+}
+
+function draw() {
+  if (!snake) return;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  drawImg(appleImg, food[0], food[1]);
+  wall.forEach(([x, y]) => drawImg(wallImg, x, y));
+  snake.forEach(([x, y], i) => {
+    if (i === 0) drawImg(headImg, x, y);
+    else {
+      const [a, b] = px(x, y);
+      ctx.fillStyle = 'rgb(46, 204, 112)';
+      ctx.fillRect(a + 1, b + 1, cell - 2, cell - 2);
+    }
+  });
+
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgb(230, 26, 26)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `bold ${Math.floor(canvas.width / 10)}px sans-serif`;
+    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - canvas.width / 16);
+    ctx.font = `${Math.floor(canvas.width / 22)}px sans-serif`;
+    ctx.fillText('[Tap to Restart]', canvas.width / 2, canvas.height / 2 + canvas.width / 16);
+  }
+}
+
+function turn(dir) {
+  const opposite = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
+  if (lastMoved !== opposite[dir]) direction = dir;
+}
+
+// Swipe controls (touch and mouse)
+let sx = 0, sy = 0;
+window.addEventListener('pointerdown', e => {
+  if (gameOver) { restart(); return; }
+  sx = e.clientX; sy = e.clientY;
+});
+window.addEventListener('pointerup', e => {
+  if (gameOver) return;
+  const dx = e.clientX - sx, dy = e.clientY - sy;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    if (dx > 50) turn('RIGHT'); else if (dx < -50) turn('LEFT');
+  } else {
+    if (dy < -50) turn('UP'); else if (dy > 50) turn('DOWN');
+  }
+});
+
+// Arrow keys on computers; Space or Enter restarts
+window.addEventListener('keydown', e => {
+  const map = { ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT' };
+  if (gameOver && (e.key === ' ' || e.key === 'Enter')) { restart(); return; }
+  if (map[e.key]) { e.preventDefault(); turn(map[e.key]); }
+});
+
+[...appleImgs, wallImg, headImg].forEach(i => i.onload = draw);
+restart();
+resize();
+setInterval(update, 200);
+</script>
+</body>
+</html>
